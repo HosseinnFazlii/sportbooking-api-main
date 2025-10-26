@@ -14,18 +14,28 @@ import { Session } from '../../entities/session';
 
 @Module({
   imports: [
+    // Register database entities used by the Auth module
     TypeOrmModule.forFeature([User, AuthOtp, Session]),
+
+    // Configure Passport for JWT authentication
     PassportModule.register({ defaultStrategy: 'jwt' }),
+
+    // Configure JWT module
     JwtModule.register({
       secret: jwtConstants.secret,
       signOptions: {
-        // Cast expiresIn so TypeScript accepts it as a valid jsonwebtoken duration
+        /**
+         * We explicitly cast to `any` so TypeScript accepts
+         * the string duration format (e.g., "1d", "60s").
+         * This does not affect runtime behavior.
+         */
         expiresIn: jwtConstants.expiresIn as any,
       },
     }),
   ],
-  providers: [AuthService, JwtStrategy],
+
   controllers: [AuthController],
+  providers: [AuthService, JwtStrategy],
   exports: [AuthService],
 })
 export class AuthModule {}
