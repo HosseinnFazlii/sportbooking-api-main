@@ -1,0 +1,70 @@
+version: "3.9"
+
+name: sportbooking
+
+networks:
+  localnet:
+
+volumes:
+  sportbooking_pgdata:
+  uploads_data:
+
+services:
+  db:
+    image: ${PG_IMAGE:-postgres:15-alpine}
+    container_name: psql-db
+    restart: unless-stopped
+    networks: [localnet]
+    environment:
+      POSTGRES_USER: ${DB_USER:-psql_admin}
+      POSTGRES_PASSWORD: ${DB_PASS:-SOME_PASSWORD}
+      POSTGRES_DB: ${DB_NAME:-SportBooking}
+    ports:
+      - "${DB_PORT:-5432}:5432"
+    volumes:
+      - sportbooking_pgdata:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U ${DB_USER:-psql_admin} -d ${DB_NAME:-SportBooking} || exit 1"]
+      interval: 5s
+      timeout: 5s
+      retries: 20
+
+  api:
+    # You can either build locally or pull a prebuilt image; here we build from your Dockerfile.
+    build:
+      context: .
+      dockerfile: Dockerfile
+    image: rismun/sportbooking/api-server:latest
+    container_name: api-server
+    restart: unless-stopped
+    networks: [localnet]
+    depends_on:
+      db:
+        condition: service_healthy
+    env_file:
+      - .env.docker
+    environment:
+      # Force DB host to the service name inside the Compose network
+      DB_HOST: db
+      # Optional: if you need to override port/user/pass/name here, you can.
+      # DB_PORT: "5432"
+      # DB_USER: "psql_admin"
+      # DB_PASS: "SOME_PASSWORD"
+      # DB_NAME: "SportBooking"
+    ports:
+      - "${PORT:-3030}:3030"
+    volumes:
+      # Persist user-uploaded files outside the container filesystem
+      - uploads_data:/home/node/uploads
+
+  # Optional: a lightweight SQL UI
+  adminer:
+    image: adminer:4
+    container_name: adminer
+    restart: unless-stopped
+    networks: [localnet]
+    depends_on:
+      db:
+        condition: service_started
+    ports:
+      - "8080:8080"

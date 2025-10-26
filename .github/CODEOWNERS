@@ -1,0 +1,5 @@
+# Require reviews from code owners
+/docs/*            @rismun-com/api-docs
+/src/api/**        @rismun-com/api-team
+/db/migrations/**  @rismun-com/db-team
+Dockerfile         @rismun-com/devops

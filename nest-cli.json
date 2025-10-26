@@ -1,0 +1,14 @@
+{
+  "$schema": "https://json.schemastore.org/nest-cli",
+  "collection": "@nestjs/schematics",
+  "sourceRoot": "src",
+  "compilerOptions": {
+    "tsConfigPath": "tsconfig.json",
+    "deleteOutDir": true,
+    "assets": [
+      { "include": "../db/**/*", "outDir": "dist/db" },
+      { "include": "config/ssl/**/*", "outDir": "dist/src/config/ssl" }
+    ],
+    "watchAssets": true
+  }
+}
