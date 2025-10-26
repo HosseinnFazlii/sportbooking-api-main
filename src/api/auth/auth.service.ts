@@ -22,10 +22,9 @@ export class AuthService {
     private readonly dataSource: DataSource,
     // private readonly logger: LoggingService,
 
-
     // private readonly userService: UserService,
     private readonly jwtService: JwtService,
-  ) { }
+  ) {}
 
   /** ------- Password login ------- */
   async validateUserByPassword(dto: { mobile: number }, password: string, ip?: string) {
@@ -72,7 +71,6 @@ export class AuthService {
     purpose: 'login' | 'register' | 'reset',
     ip?: string,
   ): Promise<{ ok: true; expiresAt: Date }> {
-
     // Small rate-limit: reuse valid unconsumed OTP if not expired; otherwise create a fresh one
     const existing = await this.otpRepo.findOne({
       where: { mobile: input.mobile, purpose, consumedAt: null },
@@ -87,8 +85,12 @@ export class AuthService {
     const expiresAt = new Date(Date.now() + 5 * 60 * 1000); // 5 minutes
     const otp = this.otpRepo.create({
       mobile: input.mobile,
-      code, purpose,
-      issuedAt: now, expiresAt, attempts: 0, requestIp: ip as any,
+      code,
+      purpose,
+      issuedAt: now,
+      expiresAt,
+      attempts: 0,
+      requestIp: ip as any,
       maxAttempts: 5,
     });
     await this.otpRepo.save(otp);
@@ -131,15 +133,17 @@ export class AuthService {
   }
 
   /** ------- Registration (requires OTP) ------- */
-  async register(dto: {
-    mobile: number;
-    name: string;
-    email?: string;
-    password?: string;
-    otpCode: string;
-    marketingOptIn?: boolean;
-  }, ip?: string): Promise<{ access_token: string; user: any }> {
-
+  async register(
+    dto: {
+      mobile: number;
+      name: string;
+      email?: string;
+      password?: string;
+      otpCode: string;
+      marketingOptIn?: boolean;
+    },
+    ip?: string,
+  ): Promise<{ access_token: string; user: any }> {
     // Validate OTP
     await this.verifyOtp({ mobile: dto.mobile }, dto.otpCode, 'register', ip);
 
@@ -172,7 +176,12 @@ export class AuthService {
   }
 
   /** ------- Change password (JWT required) ------- */
-  async changePassword(userJwt: any, currentPassword: string, newPassword: string, ip?: string): Promise<boolean> {
+  async changePassword(
+    userJwt: any,
+    currentPassword: string,
+    newPassword: string,
+    ip?: string,
+  ): Promise<boolean> {
     const me = await this.userRepo.findOne({ where: { id: userJwt.id } });
     if (!me || !me.isActive) {
       // await this.logger.log('AUTH_CHANGE_PASSWORD', {
@@ -197,35 +206,47 @@ export class AuthService {
     //   message: 'Change password success',
     // });
 
-    await this.userRepo.update({ id: me.id }, {
-      passwordHash: hashPassword(newPassword),
-      passwordSetAt: new Date(),
-      passwordMustChange: false,
-    });
+    await this.userRepo.update(
+      { id: me.id },
+      {
+        passwordHash: hashPassword(newPassword),
+        passwordSetAt: new Date(),
+        passwordMustChange: false,
+      },
+    );
     await this.createSession(me.id, ip);
     return true;
   }
 
   /** ------- JWT helpers ------- */
   private async signJwt(userId: number): Promise<string> {
-    const roles = await this.dataSource.createQueryBuilder()
+    const roles = await this.dataSource
+      .createQueryBuilder()
       .select('r.name', 'name')
       .from('users', 'u')
       .innerJoin('roles', 'r', 'r.id = u.role_id')
       .where('u.id = :uid', { uid: userId })
       .getRawMany<{ name: string }>();
-    const payload = { sub: userId, roles: roles.map(r => r.name) };
-    return this.jwtService.sign(payload, { secret: jwtConstants.secret, expiresIn: jwtConstants.expiresIn });
+
+    const payload = { sub: userId, roles: roles.map((r) => r.name) };
+
+    return this.jwtService.sign(payload, {
+      secret: jwtConstants.secret,
+      // 👇 Cast expiresIn so TS accepts string durations like "86400s", "1d"
+      expiresIn: jwtConstants.expiresIn as any,
+    });
     // NOTE: sessions table is maintained separately for device tracking / revocation lists if you want to use it
   }
 
   private async createSession(userId: number, ip?: string) {
     const expiresAt = new Date(Date.now() + 24 * 3600 * 1000);
-    await this.sessionRepo.save(this.sessionRepo.create({
-      userId,
-      expiresAt,
-      ip: ip as any,
-    }));
+    await this.sessionRepo.save(
+      this.sessionRepo.create({
+        userId,
+        expiresAt,
+        ip: ip as any,
+      }),
+    );
   }
 
   /**
@@ -237,7 +258,9 @@ export class AuthService {
     return u.role ?? undefined;
   }
 
-  private collectMenus(roles: Role[]): Array<{
+  private collectMenus(
+    roles: Role[],
+  ): Array<{
     id: number;
     name: string;
     url: string | null;
@@ -254,22 +277,34 @@ export class AuthService {
         map.set(id, m);
       }
     }
-    const flat = Array.from(map.values()).map((m) => ({
-      id: (m as any)?.menuId ?? (m as any)?.id,
-      sort_order: (m as any)?.sort_order ?? 0,
-      name: (m as any)?.name ?? null,
-      url: (m as any)?.url ?? null,
-      icon: (m as any)?.icon ?? null,
-      parentId: (m as any)?.parentId ?? null,
-    })).sort((a, b) => a.sort_order - b.sort_order);
+    const flat = Array.from(map.values())
+      .map((m) => ({
+        id: (m as any)?.menuId ?? (m as any)?.id,
+        sort_order: (m as any)?.sort_order ?? 0,
+        name: (m as any)?.name ?? null,
+        url: (m as any)?.url ?? null,
+        icon: (m as any)?.icon ?? null,
+        parentId: (m as any)?.parentId ?? null,
+      }))
+      .sort((a, b) => a.sort_order - b.sort_order);
     // Optional: stable sort by name then id
     // flat.sort((a, b) => (a.name || '').localeCompare(b.name || '') || a.id - b.id);
     return flat;
   }
 
   /** Build a simple tree from a flat menu list (parentId references within the same list) */
-  private buildMenuTree(menus: Array<{ id: number; name: string; url: string | null; icon: string | null; parentId: number | null }>) {
-    const byId = new Map<number, any>(menus.map((m) => [m.id, { ...m, children: [] as any[] }]));
+  private buildMenuTree(
+    menus: Array<{
+      id: number;
+      name: string;
+      url: string | null;
+      icon: string | null;
+      parentId: number | null;
+    }>,
+  ) {
+    const byId = new Map<number, any>(
+      menus.map((m) => [m.id, { ...m, children: [] as any[] }]),
+    );
     const roots: any[] = [];
     for (const node of byId.values()) {
       if (node.parentId && byId.has(node.parentId)) {
@@ -280,7 +315,10 @@ export class AuthService {
     }
     // sort children by name for predictable UI
     const sortChildren = (arr: any[]) => {
-      arr.sort((a, b) => (a.name || '').localeCompare(b.name || '') || a.id - b.id);
+      arr.sort(
+        (a, b) =>
+          (a.name || '').localeCompare(b.name || '') || a.id - b.id,
+      );
       arr.forEach((n) => sortChildren(n.children));
     };
     sortChildren(roots);
@@ -323,7 +361,11 @@ export class AuthService {
 
   private pictureToBase64(picture: any): string | null {
     if (!picture) return null;
-    if (typeof Buffer !== 'undefined' && typeof Buffer.isBuffer === 'function' && Buffer.isBuffer(picture)) {
+    if (
+      typeof Buffer !== 'undefined' &&
+      typeof Buffer.isBuffer === 'function' &&
+      Buffer.isBuffer(picture)
+    ) {
       return picture.toString('base64');
     }
     if (picture instanceof Uint8Array) {
