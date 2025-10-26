@@ -18,8 +18,10 @@ import { Session } from '../../entities/session';
     PassportModule.register({ defaultStrategy: 'jwt' }),
     JwtModule.register({
       secret: jwtConstants.secret,
-      // 👇 This small cast fixes the TypeScript error
-      signOptions: { expiresIn: jwtConstants.expiresIn as any },
+      signOptions: {
+        // Cast expiresIn so TypeScript accepts it as a valid jsonwebtoken duration
+        expiresIn: jwtConstants.expiresIn as any,
+      },
     }),
   ],
   providers: [AuthService, JwtStrategy],
