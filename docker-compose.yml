@@ -30,10 +30,10 @@ services:
       retries: 20
 
   api:
-    # You can either build locally or pull a prebuilt image; here we build from your Dockerfile.
     build:
       context: .
       dockerfile: Dockerfile
+    # optional: still tag a local image name so you can push later if you want
     image: rismun/sportbooking/api-server:latest
     container_name: api-server
     restart: unless-stopped
@@ -44,20 +44,25 @@ services:
     env_file:
       - .env.docker
     environment:
-      # Force DB host to the service name inside the Compose network
+      # Force DB config inside container to talk to dockerized Postgres
       DB_HOST: db
-      # Optional: if you need to override port/user/pass/name here, you can.
-      # DB_PORT: "5432"
-      # DB_USER: "psql_admin"
-      # DB_PASS: "SOME_PASSWORD"
-      # DB_NAME: "SportBooking"
+      DB_PORT: "5432"
+      DB_USER: ${DB_USER:-psql_admin}
+      DB_PASS: ${DB_PASS:-SOME_PASSWORD}
+      DB_NAME: ${DB_NAME:-SportBooking}
+
+      # Make sure NestJS listens on the same port we expose below
+      PORT: "3030"
+
+      # Where uploads live in the container (and in volume mount)
+      UPLOAD_DIR: "uploads"
     ports:
       - "${PORT:-3030}:3030"
     volumes:
-      # Persist user-uploaded files outside the container filesystem
-      - uploads_data:/home/node/uploads
+      # Persist user-uploaded files (images, etc.)
+      - uploads_data:/home/node/uploads:rw
 
-  # Optional: a lightweight SQL UI
+  # ⚠ Adminer is for debugging only. Do NOT expose in public prod.
   adminer:
     image: adminer:4
     container_name: adminer
